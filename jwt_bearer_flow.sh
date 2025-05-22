@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Config parameters to modify
-SUB="cde373a9-51ee-41e2-bdfe-624cfdc02514"    # This should be the _id value of the user
-TENANT="openam-darinder-wforce.forgeblocks.com" # For example openam-my-tenant.forgerock.io
+SUB="XXXX"    # This should be the _id value of the user
+TENANT="XXXX" # For example openam-my-tenant.forgerock.io
 REALM="alpha"
 CLIENT_ID="jwt_bearer_client"
 JWTAGENT="sampleIssuer"
@@ -13,6 +13,17 @@ PUBLIC_KEY="public_key.pem"
 IDM_ENDPOINT="https://${TENANT}/openidm/managed/${REALM}_user?_fields=userName,givenName,sn,mail,accountStatus&_prettyPrint=true&_queryFilter=true&_pageSize=1"
 TOKEN_URL="https://${TENANT}:443/am/oauth2/realms/root/realms/${REALM}/access_token"
 SCOPE="test"
+
+# Function: Check for OpenSSL
+openSSLCheck() {
+  echo "------------------------------------------"
+  echo
+  hash openssl &>/dev/null
+  if [ $? -eq 1 ]; then
+    echo >&2 "OpenSSL is not installed on the system. Please install and re-run."
+    exit 1
+  fi
+}
 
 # Function: Setup Guidance
 setup() {
@@ -44,16 +55,6 @@ EOF
   if [[ "$key" =~ [qQ] ]]; then
     echo "Exiting setup..."
     exit 0
-  fi
-}
-
-openSSLCheck() {
-  echo "------------------------------------------"
-  echo
-  hash openssl &>/dev/null
-  if [ $? -eq 1 ]; then
-    echo >&2 "OpenSSL is not installed on the system. Please install and re-run."
-    exit 1
   fi
 }
 
