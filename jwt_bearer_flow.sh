@@ -1,48 +1,44 @@
 #!/bin/bash
 
 # Config parameters to modify
-SUB="cde373a9-51ee-41e2-bdfe-624cfdc02514" #This should be the _id value of the user
-CLIENT_ID="salesforce_client"
-PRIVATE_KEY="private_key.pem"
-PUBLIC_KEY="public_key.pem"
-TENANT="openam-XXXX"
+SUB="cde373a9-51ee-41e2-bdfe-624cfdc02514"    # This should be the _id value of the user
+TENANT="openam-darinder-wforce.forgeblocks.com" # For example openam-my-tenant.forgerock.io
 REALM="alpha"
+CLIENT_ID="jwt_bearer_client"
+JWTAGENT="sampleIssuer"
 
 # No need to modify these config parameters
+PRIVATE_KEY="private_key.pem"
+PUBLIC_KEY="public_key.pem"
 IDM_ENDPOINT="https://${TENANT}/openidm/managed/${REALM}_user?_fields=userName,givenName,sn,mail,accountStatus&_prettyPrint=true&_queryFilter=true&_pageSize=1"
 TOKEN_URL="https://${TENANT}:443/am/oauth2/realms/root/realms/${REALM}/access_token"
-SCOPE="fr:idm:*"
-NOW=$(date +%s)
-EXP=$((NOW + 300)) # 5 minutes from now
+SCOPE="test"
 
-# Function: Setup Guidance 
+# Function: Setup Guidance
 setup() {
   cat <<EOF
-------------------------------------------
 
-User and Delegated Admin Setup
+User Setup
 ------------------------------------------
-1. Create a new user via the Platform UI
-2. Create an internal delegated admin role, set required CRUD permissions for alpha_user, and add the user to this role
-3. From the Platform UI note the _id value of the user and update the SUB variable in this script
+1. Create a new user via the Platform UI: Identities > Manage
+2. Click into the user and note the _id value of the user from the URL and update the SUB variable in this script
 
 OAuth2 Client Setup
 ------------------------------------------
-1. Create a Native/SPA Public OAuth2 client called $CLIENT_ID
-2. Set Grant Types to JWT Bearer only
-3. Set Scopes to $SCOPE only
-4. Advanced Settings > Access: Set Response Types to token
-5. Advanced Settings > Authentication: Set Token Endpoint Auth Method to client_secret_post
+1. From the Platform UI > Applications > Custom Application > OIDC - OpenID Connect page. Create a Native/SPA Public OAuth2 client called $CLIENT_ID
+2. On the Sign On tab, set Grant Types to JWT Bearer only and Scopes to be $SCOPE only and hit Save.
+4. Expand Show advanced settings > Access and Set Response Types to token only and hit Save.
+5. Click Authentication below Access and set Token Endpoint Auth Method to client_secret_post and hit Save.
 
 Trusted JWT Issuer Setup
 ------------------------------------------
-1. In Access Management UI > Applications > Trusted JWT Issuer > Add Trusted JWT Issuer Agent
-2. Name it: myJWTAgent
-3. Set JWT Issuer to: $CLIENT_ID
-4. Convert $PUBLIC_KEY to a JWK Set and paste it in the config
-5. Set Allowed Subjects to: $SUB
+1. In Access Management Native Console UI. Goto > Applications > OAuth 2.0 > Trusted JWT Issuer > Add Trusted JWT Issuer Agent
+2. Set the Agent ID to: $JWTAGENT
+3. Set JWT Issuer to the OAuth2 Client ID created earlier: $CLIENT_ID
+4. Copy the Output for the Generating JWK Set (including the {}) and paste into the JWK Set parameter.
+5. Set Allowed Subjects to: $SUB and hit Save Changes.
 EOF
-
+  echo
   read -n1 -r -p "Press 'q' to quit and complete setup manually, or any other key to continue: " key
   echo
   if [[ "$key" =~ [qQ] ]]; then
@@ -51,35 +47,53 @@ EOF
   fi
 }
 
-# Function: Check for key files 
+openSSLCheck() {
+  echo "------------------------------------------"
+  echo
+  hash openssl &>/dev/null
+  if [ $? -eq 1 ]; then
+    echo >&2 "OpenSSL is not installed on the system. Please install and re-run."
+    exit 1
+  fi
+}
+
+# Function: Check for key files
 keyFileCheck() {
   echo "------------------------------------------"
   echo
-  [[ ! -f "$PRIVATE_KEY" ]] && {
+  if [[ ! -f "$PRIVATE_KEY" ]]; then
     echo "Private key ($PRIVATE_KEY) not found."
-    echo "Generate using:"
+    echo "Generating using:"
     echo "openssl genpkey -algorithm RSA -out $PRIVATE_KEY -pkeyopt rsa_keygen_bits:2048"
-    exit 1
-  }
-  [[ ! -f "$PUBLIC_KEY" ]] && {
+    openssl genpkey -algorithm RSA -out $PRIVATE_KEY -pkeyopt rsa_keygen_bits:2048
+  else
+    echo "Private key found, skipping generation."
+  fi
+
+  if [[ ! -f "$PUBLIC_KEY" ]]; then
     echo "Public key ($PUBLIC_KEY) not found."
-    echo "Generate using:"
+    echo "Generating using:"
     echo "openssl rsa -in $PRIVATE_KEY -pubout -out $PUBLIC_KEY"
-    exit 1
-  }
-  echo "Public and private keypair found."
+    openssl rsa -in $PRIVATE_KEY -pubout -out $PUBLIC_KEY
+  else
+    echo "Public keypair found, skipping generation."
+  fi
+
+  echo "Generating JWK Set from the $PUBLIC_KEY public key for use when setting up the Trusted JWT Issuer"
+  ./pem_to_jwk_set.sh
 }
 
-# Function: Base64URL encode 
+# Function: Base64URL encode
 base64url_encode() {
   openssl base64 -e -A | tr '+/' '-_' | tr -d '='
 }
 
-# Function: Generate signed JWT 
+# Function: Generate signed JWT
 genJWT() {
   echo "------------------------------------------"
   echo
-
+  NOW=$(date +%s)
+  EXP=$((NOW + 10)) # 10 seconds from now.
   HEADER=$(jq -nc --arg alg "RS256" --arg typ "JWT" '{alg: $alg, typ: $typ}')
   PAYLOAD=$(jq -nc \
     --arg iss "$CLIENT_ID" \
@@ -108,48 +122,41 @@ genJWT() {
   echo "$JWT"
 }
 
-#  Function: Decode JWT payload 
+#  Function: Decode JWT payload
 decodeJWT() {
   echo "------------------------------------------"
-  echo "Decoded JWT Payload:"
-  jq -R 'split(".") | .[1] | @base64d | fromjson' <<< "$JWT"
+  echo
+  echo "Decoding ${1} token:"
+  jq -R 'split(".") | .[1] | @base64d | fromjson' <<<"${2}"
 }
 
-#  Function: Request Access Token 
+#  Function: Request Access Token
 getAccessToken() {
   echo "------------------------------------------"
+  echo
   echo "Requesting access token using JWT..."
   RESPONSE=$(curl -s --request POST "$TOKEN_URL" \
     --data "client_id=$CLIENT_ID" \
     --data "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" \
     --data "assertion=$JWT" \
     --data "scope=$SCOPE")
-  
+
   ACCESS_TOKEN=$(echo $RESPONSE | jq -r .access_token)
 
   if [[ -z "$ACCESS_TOKEN" ]]; then
-  echo "Error: access_token not found in response."
-  echo "Response: $RESPONSE"
-  exit 1
-fi
+    echo "Error: access_token not found in response."
+    echo "Response: $RESPONSE"
+    exit 1
+  fi
   echo "Access token generated:"
   echo "$ACCESS_TOKEN"
 }
 
-callIDM() {
-	echo "------------------------------------------"
-	echo "Calling this IDM Endpoint: ${IDM_ENDPOINT} in realm: ${REALM} to read the first user in the repo using generated access token:"
-	curl -s \
-		--request GET \
-		--header 'Authorization: Bearer '${ACCESS_TOKEN}'' \
-		${IDM_ENDPOINT} | jq .
-
-}
-
 # Main
-setup
+openSSLCheck
 keyFileCheck
+setup
 genJWT
-decodeJWT
+decodeJWT "Signed JWT" $JWT
 getAccessToken
-callIDM
+decodeJWT Access $ACCESS_TOKEN
