@@ -2,7 +2,7 @@
 
 # Config parameters to modify
 SUB="XXXX"    # This should be the _id value of the user
-TENANT="XXXX" # For example openam-my-tenant.forgerock.io
+TENANT="openam-XXXX.forgerock.io" # For example openam-my-tenant.forgerock.io
 REALM="alpha"
 CLIENT_ID="jwt_bearer_client"
 JWTAGENT="sampleIssuer"
@@ -10,7 +10,6 @@ JWTAGENT="sampleIssuer"
 # No need to modify these config parameters
 PRIVATE_KEY="private_key.pem"
 PUBLIC_KEY="public_key.pem"
-IDM_ENDPOINT="https://${TENANT}/openidm/managed/${REALM}_user?_fields=userName,givenName,sn,mail,accountStatus&_prettyPrint=true&_queryFilter=true&_pageSize=1"
 TOKEN_URL="https://${TENANT}:443/am/oauth2/realms/root/realms/${REALM}/access_token"
 SCOPE="test"
 
@@ -29,10 +28,15 @@ openSSLCheck() {
 setup() {
   cat <<EOF
 
-User Setup
+Tenant Setup
+------------------------------------------
+1. From the Access Management Native UI > Services > Base URL Source. Check Base URL Source is sto to Host/protocol from incoming request. 
+2. For time execution, quit this script and replace the TENANT variable with your tenant FQDN. For example: TENANT="openam-my-tenant.forgerock.io"
+
 ------------------------------------------
 1. Create a new user via the Platform UI: Identities > Manage
 2. Click into the user and note the _id value of the user from the URL and update the SUB variable in this script
+3. Quit the script and set the _id as the SUB variable
 
 OAuth2 Client Setup
 ------------------------------------------
@@ -47,7 +51,7 @@ Trusted JWT Issuer Setup
 2. Set the Agent ID to: $JWTAGENT
 3. Set JWT Issuer to the OAuth2 Client ID created earlier: $CLIENT_ID
 4. Copy the Output for the Generating JWK Set (including the {}) and paste into the JWK Set parameter.
-5. Set Allowed Subjects to: $SUB and hit Save Changes.
+5. Set Allowed Subjects to the subject (_id) from the user setup section and hit Save Changes.
 EOF
   echo
   read -n1 -r -p "Press 'q' to quit and complete setup manually, or any other key to continue: " key
@@ -142,10 +146,10 @@ getAccessToken() {
     --data "assertion=$JWT" \
     --data "scope=$SCOPE")
 
-  ACCESS_TOKEN=$(echo $RESPONSE | jq -r .access_token)
-
-  if [[ -z "$ACCESS_TOKEN" ]]; then
-    echo "Error: access_token not found in response."
+  ACCESS_TOKEN=$(echo "$RESPONSE" | jq -r .access_token)
+  
+  if [[ -z "$ACCESS_TOKEN" || "$ACCESS_TOKEN" == "null" ]]; then
+    echo "Error generating access token."
     echo "Response: $RESPONSE"
     exit 1
   fi
