@@ -33,6 +33,7 @@ Tenant Setup
 1. From the Access Management Native UI > Services > Base URL Source. Check Base URL Source is set to Host/protocol from incoming request. 
 2. For first time execution, quit this script and replace the TENANT variable with your tenant FQDN. For example: TENANT="openam-my-tenant.forgerock.io"
 
+User Setup
 ------------------------------------------
 1. Create a new user via the Platform UI: Identities > Manage
 2. Click into the user and note the _id value of the user from the URL and update the SUB variable in this script
