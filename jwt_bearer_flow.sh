@@ -30,8 +30,8 @@ setup() {
 
 Tenant Setup
 ------------------------------------------
-1. From the Access Management Native UI > Services > Base URL Source. Check Base URL Source is sto to Host/protocol from incoming request. 
-2. For time execution, quit this script and replace the TENANT variable with your tenant FQDN. For example: TENANT="openam-my-tenant.forgerock.io"
+1. From the Access Management Native UI > Services > Base URL Source. Check Base URL Source is set to Host/protocol from incoming request. 
+2. For first time execution, quit this script and replace the TENANT variable with your tenant FQDN. For example: TENANT="openam-my-tenant.forgerock.io"
 
 ------------------------------------------
 1. Create a new user via the Platform UI: Identities > Manage
